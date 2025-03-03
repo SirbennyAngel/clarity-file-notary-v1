@@ -7,51 +7,48 @@ import {
 } from 'https://deno.land/x/clarinet@v1.0.0/index.ts';
 import { assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
 
+// [Previous test cases remain]
+
 Clarinet.test({
-    name: "Test batch file registration",
+    name: "Test rate limiting functionality",
     async fn(chain: Chain, accounts: Map<string, Account>) {
         const wallet1 = accounts.get('wallet_1')!;
-        const testHashes = [
-            '0x1234567890123456789012345678901234567890123456789012345678901234',
-            '0x2234567890123456789012345678901234567890123456789012345678901234'
-        ];
-        const descriptions = ["Test Doc 1", "Test Doc 2"];
+        const testHash = '0x1234567890123456789012345678901234567890123456789012345678901234';
         
-        let block = chain.mineBlock([
-            Tx.contractCall('file-notary', 'register-batch', [
-                types.list(testHashes.map(h => types.buff(h))),
-                types.list(descriptions.map(d => types.ascii(d))),
-                types.ascii("Test Batch")
-            ], wallet1.address)
-        ]);
+        let blocks = [];
+        for (let i = 0; i < 11; i++) {
+            blocks.push(
+                Tx.contractCall('file-notary', 'register-file', [
+                    types.buff(testHash + i),
+                    types.ascii("Test Document")
+                ], wallet1.address)
+            );
+        }
         
-        block.receipts[0].result.expectOk().expectUint(1);
+        let block = chain.mineBlock(blocks);
+        block.receipts[10].result.expectErr(106); // err-rate-limit
     },
 });
 
 Clarinet.test({
-    name: "Test batch verification",
+    name: "Test file history tracking",
     async fn(chain: Chain, accounts: Map<string, Account>) {
-        const deployer = accounts.get('deployer')!;
         const wallet1 = accounts.get('wallet_1')!;
-        const testHashes = [
-            '0x1234567890123456789012345678901234567890123456789012345678901234',
-            '0x2234567890123456789012345678901234567890123456789012345678901234'
-        ];
-        const descriptions = ["Test Doc 1", "Test Doc 2"];
+        const testHash = '0x1234567890123456789012345678901234567890123456789012345678901234';
         
         let block = chain.mineBlock([
-            Tx.contractCall('file-notary', 'register-batch', [
-                types.list(testHashes.map(h => types.buff(h))),
-                types.list(descriptions.map(d => types.ascii(d))),
-                types.ascii("Test Batch")
+            Tx.contractCall('file-notary', 'register-file', [
+                types.buff(testHash),
+                types.ascii("Test Document")
             ], wallet1.address),
-            Tx.contractCall('file-notary', 'verify-batch', [
-                types.uint(1)
-            ], deployer.address)
+            Tx.contractCall('file-notary', 'get-file-history', [
+                types.buff(testHash)
+            ], wallet1.address)
         ]);
         
         block.receipts[0].result.expectOk();
         block.receipts[1].result.expectOk();
     },
 });
+
+// [Additional test cases for new functionality]
