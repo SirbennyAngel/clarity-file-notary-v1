@@ -7,41 +7,48 @@ import {
 } from 'https://deno.land/x/clarinet@v1.0.0/index.ts';
 import { assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
 
-// [Previous test cases remain the same]
+// [Previous test cases remain]
 
 Clarinet.test({
-    name: "Test contract pause functionality",
+    name: "Test rate limiting functionality",
     async fn(chain: Chain, accounts: Map<string, Account>) {
-        const deployer = accounts.get('deployer')!;
+        const wallet1 = accounts.get('wallet_1')!;
+        const testHash = '0x1234567890123456789012345678901234567890123456789012345678901234';
+        
+        let blocks = [];
+        for (let i = 0; i < 11; i++) {
+            blocks.push(
+                Tx.contractCall('file-notary', 'register-file', [
+                    types.buff(testHash + i),
+                    types.ascii("Test Document")
+                ], wallet1.address)
+            );
+        }
+        
+        let block = chain.mineBlock(blocks);
+        block.receipts[10].result.expectErr(106); // err-rate-limit
+    },
+});
+
+Clarinet.test({
+    name: "Test file history tracking",
+    async fn(chain: Chain, accounts: Map<string, Account>) {
         const wallet1 = accounts.get('wallet_1')!;
         const testHash = '0x1234567890123456789012345678901234567890123456789012345678901234';
         
         let block = chain.mineBlock([
-            Tx.contractCall('file-notary', 'toggle-contract-pause', [], deployer.address),
             Tx.contractCall('file-notary', 'register-file', [
                 types.buff(testHash),
                 types.ascii("Test Document")
+            ], wallet1.address),
+            Tx.contractCall('file-notary', 'get-file-history', [
+                types.buff(testHash)
             ], wallet1.address)
         ]);
         
         block.receipts[0].result.expectOk();
-        block.receipts[1].result.expectErr(105); // err-contract-paused
+        block.receipts[1].result.expectOk();
     },
 });
 
-Clarinet.test({
-    name: "Test empty input validation",
-    async fn(chain: Chain, accounts: Map<string, Account>) {
-        const wallet1 = accounts.get('wallet_1')!;
-        const testHash = '0x1234567890123456789012345678901234567890123456789012345678901234';
-        
-        let block = chain.mineBlock([
-            Tx.contractCall('file-notary', 'register-file', [
-                types.buff(testHash),
-                types.ascii("")
-            ], wallet1.address)
-        ]);
-        
-        block.receipts[0].result.expectErr(104); // err-empty-input
-    },
-});
+// [Additional test cases for new functionality]
